@@ -1,47 +1,161 @@
 # 🔐 How to Set or Change the Web UI Password
 
-By default, the Akvorado Web Console is secured using **Traefik Basic Authentication**. The default credentials in the deployment template are:
-* **Username:** `admin`
-* **Password:** `admin`
+By default, the **Akvorado Web Console** is secured using **Traefik Basic Authentication**.
 
-For security, **you must change this password** before exposing the dashboard to your network.
+## Default Credentials
+
+| Field | Value |
+|---------|---------|
+| Username | `admin` |
+| Password | `admin` |
+
+> ⚠️ For security reasons, change these credentials before exposing the dashboard to your network.
 
 ---
 
-### Step 1: Generate a Password Hash
-Traefik requires passwords to be securely hashed (MD5, SHA1, or BCrypt). You can generate a hash instantly using a temporary Docker container. 
+## Step 1: Generate a Password Hash
 
-Run the following command in your terminal. Replace `YourNewSecurePassword` with your actual desired password:
+Traefik requires passwords to be stored as a secure hash (MD5, SHA1, or BCrypt).
+
+Run the following command in your terminal, replacing `YourNewSecurePassword` with your desired password:
 
 ```bash
 docker run --rm -it httpd:alpine htpasswd -nb admin YourNewSecurePassword
-Step 2: Escape the $ Symbols (CRITICAL)
-When you run the command above, it will output a generated hash. Because Docker Compose treats the $ symbol as a system variable, you must double every $ symbol in the output before using it.
-Example Conversion:
-Raw Output from Step 1:
+```
+
+Example:
+
+```bash
+docker run --rm -it httpd:alpine htpasswd -nb admin MyStrongPassword123!
+```
+
+Example output:
+
+```text
 admin:$apr1$OQ.H71wM$HkY9L6i.9GvR6R3w2E/s.0
-Escaped Output (Double $$):
+```
+
+---
+
+## Step 2: Escape the `$` Symbols (IMPORTANT)
+
+Docker Compose interprets `$` as an environment variable reference.
+
+Before using the generated hash, replace every `$` with `$$`.
+
+### Example
+
+**Raw Output**
+
+```text
+admin:$apr1$OQ.H71wM$HkY9L6i.9GvR6R3w2E/s.0
+```
+
+**Escaped Output**
+
+```text
 admin:$$apr1$$OQ.H71wM$$HkY9L6i.9GvR6R3w2E/s.0
-Step 3: Update docker-compose.yml
-Open your docker-compose.yml file using a text editor (like nano or vim):
-code
-Bash
+```
+
+---
+
+## Step 3: Update `docker-compose.yml`
+
+Open your Docker Compose file:
+
+```bash
 nano docker-compose.yml
-Scroll to the very bottom to the traefik service. Find the basicauth.users label and replace the existing hash with your Escaped Output from Step 2.
-code
-Yaml
+```
+
+Locate the **Traefik** service and find the following label:
+
+```yaml
 traefik:
-    # ... [other config]
-    labels:
-      # ... [other labels]
-      
-      # REPLACE THE HASH ON THIS LINE WITH YOUR ESCAPED HASH:
-      - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$OQ.H71wM$$HkY9L6i.9GvR6R3w2E/s.0"
-(Note: If you decide to change the username from admin to something else, you must also update the - traefik.http.middlewares.console-auth.headers.customrequestheaders.Remote-User=admin line under the akvorado-console service to match your new username).
-Step 4: Apply the Changes to Docker
-Save the file and exit. To apply the new security settings, run the following command to update your running Docker containers:
-code
-Bash
+  # ... other configuration ...
+
+  labels:
+    # ... other labels ...
+
+    - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$OQ.H71wM$$HkY9L6i.9GvR6R3w2E/s.0"
+```
+
+Replace the existing hash with your newly generated and escaped hash.
+
+### Example
+
+```yaml
+traefik:
+  labels:
+    - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$NEW_HASH_HERE$$REPLACE_ME"
+```
+
+---
+
+## Optional: Change the Username
+
+If you decide to use a username other than `admin`, update both locations.
+
+### Basic Authentication User
+
+```yaml
+- "traefik.http.middlewares.auth.basicauth.users=myuser:$$apr1$$HASH"
+```
+
+### Remote User Header
+
+Under the `akvorado-console` service, update:
+
+```yaml
+- traefik.http.middlewares.console-auth.headers.customrequestheaders.Remote-User=myuser
+```
+
+The username in both locations must match.
+
+---
+
+## Step 4: Apply the Changes
+
+Save the file and redeploy the stack:
+
+```bash
 sudo docker compose up -d
-(Docker will automatically detect the configuration change and recreate only the Traefik container).
-You can now navigate to http://<YOUR_SERVER_IP>:8081 and log in securely with your new credentials!
+```
+
+Docker Compose will automatically detect the configuration change and recreate only the affected containers.
+
+---
+
+## Verify Access
+
+Open your browser and navigate to:
+
+```text
+http://<YOUR_SERVER_IP>:8081
+```
+
+Log in using your newly configured credentials.
+
+---
+
+## Security Recommendations
+
+- Use a strong password (12+ characters minimum).
+- Prefer a password manager-generated password.
+- Never expose the dashboard with the default `admin/admin` credentials.
+- Restrict dashboard access using a firewall or reverse proxy whenever possible.
+- Rotate credentials periodically.
+
+---
+
+## Quick Reference
+
+```bash
+# Generate hash
+docker run --rm -it httpd:alpine htpasswd -nb admin YourNewSecurePassword
+
+# Escape all $ characters by doubling them
+$  ->  $$
+
+# Apply changes
+sudo docker compose up -d
+```
